@@ -26,38 +26,50 @@ function formatNumber(num) {
 
 async function fetchRedStoneTVS() {
   try {
-    const response = await axios.get('https://api.llama.fi/protocol/redstone');
-    const data = response.data;
-    
-    let totalTVS = 0;
-    const breakdown = {};
-    
-    if (data.currentChainTvls) {
-      for (const [key, value] of Object.entries(data.currentChainTvls)) {
-        totalTVS += value;
-        
-        if (key.includes('-staking')) {
-          breakdown.staking = (breakdown.staking || 0) + value;
-        } else if (key.includes('-pool2')) {
-          breakdown.pool2 = (breakdown.pool2 || 0) + value;
-        } else if (key.includes('-borrowed')) {
-          breakdown.borrowed = (breakdown.borrowed || 0) + value;
-        } else if (key.includes('-doublecounted')) {
-          breakdown.doublecounted = (breakdown.doublecounted || 0) + value;
-        } else if (key.includes('-liquidstaking')) {
-          breakdown.liquidstaking = (breakdown.liquidstaking || 0) + value;
-        } else if (key.includes('-vesting')) {
-          breakdown.vesting = (breakdown.vesting || 0) + value;
-        } else {
-          breakdown.tvl = (breakdown.tvl || 0) + value;
-        }
+    const response = await axios.get('https://defillama.com/oracles/RedStone', {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
       }
+    });
+    
+    const html = response.data;
+    
+    const tvsMatch = html.match(/Total\s+Value\s+Secured[^$]*\$([0-9,.]+[BMK]?)/i) ||
+                     html.match(/TVS[^$]*\$([0-9,.]+[BMK]?)/i) ||
+                     html.match(/\$([0-9,.]+[BMK]?)\s*(?:billion|B|million|M)/i);
+    
+    if (tvsMatch && tvsMatch[1]) {
+      const tvsString = tvsMatch[1];
+      console.log(`Found TVS string: ${tvsString}`);
+      
+      const numericPart = tvsString.replace(/[^0-9.]/g, '');
+      let tvsValue = parseFloat(numericPart);
+      
+      if (tvsString.toLowerCase().includes('b') || tvsString.toLowerCase().includes('billion')) {
+        tvsValue = tvsValue * 1e9;
+      } else if (tvsString.toLowerCase().includes('m') || tvsString.toLowerCase().includes('million')) {
+        tvsValue = tvsValue * 1e6;
+      } else if (tvsString.toLowerCase().includes('k') || tvsString.toLowerCase().includes('thousand')) {
+        tvsValue = tvsValue * 1e3;
+      }
+      
+      console.log(`Parsed RedStone TVS: ${formatNumber(tvsValue)}`);
+      return tvsValue;
     }
     
-    console.log(`Fetched RedStone TVS: ${formatNumber(totalTVS)}`);
-    console.log(`Breakdown:`, breakdown);
+    console.log('Could not extract TVS from page, trying alternative method...');
     
-    return totalTVS;
+    const numberMatches = html.match(/\$([0-9]+\.?[0-9]*)\s*(?:billion|B)/gi);
+    if (numberMatches && numberMatches.length > 0) {
+      const largestMatch = numberMatches[0];
+      const value = parseFloat(largestMatch.replace(/[^0-9.]/g, '')) * 1e9;
+      console.log(`Found TVS via alternative method: ${formatNumber(value)}`);
+      return value;
+    }
+    
+    console.error('Could not extract TVS from DeFiLlama page');
+    return null;
+    
   } catch (error) {
     console.error('Error fetching RedStone TVS:', error.message);
     return null;
@@ -93,7 +105,7 @@ async function updateBotStatus() {
   }
 }
 
-client.once('ready', async () => {
+client.once('clientReady', async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
   
   await updateBotStatus();
