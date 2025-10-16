@@ -34,13 +34,49 @@ async function fetchRedStoneTVS() {
     
     const html = response.data;
     
+    const nextDataMatch = html.match(/<script id="__NEXT_DATA__" type="application\/json">({.*?})<\/script>/);
+    
+    if (nextDataMatch && nextDataMatch[1]) {
+      const jsonData = JSON.parse(nextDataMatch[1]);
+      const chartData = jsonData?.props?.pageProps?.chartData;
+      
+      if (chartData && chartData.length > 0) {
+        const latestData = chartData[chartData.length - 1][1];
+        
+        const tvl = latestData.tvl || 0;
+        const staking = latestData.staking || 0;
+        const pool2 = latestData.pool2 || 0;
+        const borrowed = latestData.borrowed || 0;
+        const doublecounted = latestData.doublecounted || 0;
+        const liquidstaking = latestData.liquidstaking || 0;
+        const vesting = latestData.vesting || 0;
+        
+        const totalTVS = tvl + staking + pool2 + borrowed + doublecounted + liquidstaking + vesting;
+        
+        console.log('RedStone TVS Breakdown:');
+        console.log(`  TVL: ${formatNumber(tvl)}`);
+        console.log(`  Staking: ${formatNumber(staking)}`);
+        console.log(`  Pool2: ${formatNumber(pool2)}`);
+        console.log(`  Borrowed: ${formatNumber(borrowed)}`);
+        if (doublecounted > 0) console.log(`  Double Count: ${formatNumber(doublecounted)}`);
+        if (liquidstaking > 0) console.log(`  Liquid Staking: ${formatNumber(liquidstaking)}`);
+        if (vesting > 0) console.log(`  Vesting: ${formatNumber(vesting)}`);
+        console.log(`  ---`);
+        console.log(`  Total TVS: ${formatNumber(totalTVS)}`);
+        
+        return totalTVS;
+      }
+    }
+    
+    console.log('Could not extract TVS from Next.js data, trying fallback method...');
+    
     const tvsMatch = html.match(/Total\s+Value\s+Secured[^$]*\$([0-9,.]+[BMK]?)/i) ||
                      html.match(/TVS[^$]*\$([0-9,.]+[BMK]?)/i) ||
                      html.match(/\$([0-9,.]+[BMK]?)\s*(?:billion|B|million|M)/i);
     
     if (tvsMatch && tvsMatch[1]) {
       const tvsString = tvsMatch[1];
-      console.log(`Found TVS string: ${tvsString}`);
+      console.log(`Found TVS string (fallback): ${tvsString}`);
       
       const numericPart = tvsString.replace(/[^0-9.]/g, '');
       let tvsValue = parseFloat(numericPart);
@@ -53,18 +89,7 @@ async function fetchRedStoneTVS() {
         tvsValue = tvsValue * 1e3;
       }
       
-      console.log(`Parsed RedStone TVS: ${formatNumber(tvsValue)}`);
       return tvsValue;
-    }
-    
-    console.log('Could not extract TVS from page, trying alternative method...');
-    
-    const numberMatches = html.match(/\$([0-9]+\.?[0-9]*)\s*(?:billion|B)/gi);
-    if (numberMatches && numberMatches.length > 0) {
-      const largestMatch = numberMatches[0];
-      const value = parseFloat(largestMatch.replace(/[^0-9.]/g, '')) * 1e9;
-      console.log(`Found TVS via alternative method: ${formatNumber(value)}`);
-      return value;
     }
     
     console.error('Could not extract TVS from DeFiLlama page');
