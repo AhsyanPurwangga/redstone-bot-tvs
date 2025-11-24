@@ -1,6 +1,7 @@
 import { Client, GatewayIntentBits, ActivityType } from 'discord.js';
 import axios from 'axios';
 import cron from 'node-cron';
+import 'dotenv/config';
 
 const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
 
